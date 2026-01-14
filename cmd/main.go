@@ -23,6 +23,7 @@ func main() {
 	cfgHandler := handlers.NewConfigHandler(deps)
 	router := gin.Default()
 	router.GET("/configs", cfgHandler.CurrentAvailableConfigs)
+	router.PATCH("/configs", cfgHandler.RequestConfigsUpdate)
 	router.Run("0.0.0.0:8080")
 
 	for {

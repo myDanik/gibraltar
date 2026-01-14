@@ -2,10 +2,13 @@ package services
 
 import (
 	"fmt"
+	"gibraltar/internal/models"
 	"log"
 	"sort"
 	"time"
 )
+
+const TestAttempt int = 3
 
 type Dependencies struct {
 	PreparationService *PreparationService
@@ -21,11 +24,11 @@ func (d Dependencies) CalculateAvailableServers() {
 	err := d.PreparationService.Pull()
 	if err != nil {
 		log.Println(err)
-		if _, ok := d.Cache.Get(СacheKey); ok {
+		if _, ok := d.Cache.Get(AvailableKey); ok {
 			return
 		}
 	}
-	configs, err := d.PreparationService.ParseConfigs("/githubmirror/bypass/bypass-1.txt")
+	configs, err := d.PreparationService.ParseConfigs("/githubmirror/bypass/bypass-all.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -35,14 +38,24 @@ func (d Dependencies) CalculateAvailableServers() {
 	}
 	filter := NewConfigFilter(subnets)
 	SortSubnets(subnets)
-	for i := 0; i < len(configs); i++ {
-		ok, _ := filter.IsIPFromWhitelist(configs[i].IP)
-		if !ok {
-			configs = append(configs[:i], configs[i+1:]...)
+	out := configs[:0]
+	for _, c := range configs {
+		ok, _ := filter.IsIPFromWhitelist(c.IP)
+		if ok {
+			out = append(out, c)
 		}
 	}
-	log.Printf("%d configs will be tested\n", len(configs))
-	TestConfigs(configs, *d.VlessTestService)
+	configs = out
+	d.Cache.Set(AllKey, configs)
+	for i := 0; i < TestAttempt; i++ {
+		TestConfigs(configs, d.VlessTestService)
+	}
+
+	d.Cache.Set(AvailableKey, configs[:SortConfigsByTestResult(configs)])
+
+}
+
+func SortConfigsByTestResult(configs []models.VlessConfig) (availableCount int) {
 	sort.Slice(configs, func(i, j int) bool {
 		ai := configs[i].TestResult
 		aj := configs[j].TestResult
@@ -61,12 +74,11 @@ func (d Dependencies) CalculateAvailableServers() {
 		return false
 	})
 
-	availableCount := 0
+	availableCount = 0
 	for _, v := range configs {
 		if v.TestResult > -1 {
 			availableCount++
 		}
 	}
-	d.Cache.Set(СacheKey, configs[:availableCount])
-
+	return availableCount
 }

@@ -1,7 +1,7 @@
 package services
 
 import (
-	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,37 +29,29 @@ func NewVlessTestService(url string) *URLTestService {
 }
 
 func (t *URLTestService) Test(vlessURL string, localPort int) (time.Duration, error) {
-	v, err := parseVlessURL(vlessURL)
+	vlessCfg, err := parseVlessURL(vlessURL)
 	if err != nil {
 		return 0 * time.Millisecond, err
 	}
-	outbound := buildVlessOutbound(*v)
+	outbound := buildVlessOutbound(*vlessCfg)
 	config := buildSingBoxConfig(outbound, localPort)
-
-	// data, _ := json.MarshalIndent(config, "", "  ")
-	// _ = os.WriteFile("config.json", data, 0644)
-
-	tmp, err := os.CreateTemp("", "singbox-config-*.json")
+	pattern := fmt.Sprintf("singbox-config-*-%s.json", vlessCfg.Server)
+	tmp, err := os.CreateTemp("", pattern)
 	if err != nil {
-		return 0, fmt.Errorf("create temp config: %w", err)
+		return 0 * time.Millisecond, fmt.Errorf("create temp config: %w", err)
 	}
-	cfgPath := tmp.Name()
+	defer os.Remove(tmp.Name())
 	enc := json.NewEncoder(tmp)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(config); err != nil {
 		tmp.Close()
-		os.Remove(cfgPath)
 		return 0, fmt.Errorf("write config: %w", err)
 	}
 	tmp.Close()
-	defer os.Remove(cfgPath)
-	var outBuf bytes.Buffer
-	cmd := exec.Command("sing-box", "run", "-c", cfgPath)
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &outBuf
+	cmd := exec.Command("sing-box", "run", "-c", tmp.Name())
 
 	if err := cmd.Start(); err != nil {
-		return 0, fmt.Errorf("start sing-box: %w; output: %s", err, outBuf.String())
+		return 0, fmt.Errorf("start sing-box: %w", err)
 	}
 	started := true
 	defer func() {
@@ -71,33 +63,29 @@ func (t *URLTestService) Test(vlessURL string, localPort int) (time.Duration, er
 
 	stringPort := strconv.Itoa(localPort)
 
-	if err := waitPort(net.JoinHostPort("127.0.0.1", stringPort), 6*time.Second); err != nil {
-		return 0, fmt.Errorf("sing-box inbound not ready: %w; sing-box output: %s", err, outBuf.String())
+	if err := waitPort(net.JoinHostPort("127.0.0.1", stringPort), 5*time.Second); err != nil {
+		return 0, fmt.Errorf("sing-box inbound not ready: %w", err)
 	}
 
 	dialer, err := proxy.SOCKS5("tcp", net.JoinHostPort("127.0.0.1", stringPort), nil, proxy.Direct)
 	if err != nil {
-		return 0, fmt.Errorf("create socks5 dialer: %w; output: %s", err, outBuf.String())
+		return 0, fmt.Errorf("create socks5 dialer: %w", err)
 	}
-	transport := &http.Transport{}
-	if cd, ok := dialer.(proxy.ContextDialer); ok {
-		transport.DialContext = cd.DialContext
-	} else {
-		transport.Dial = func(network, addr string) (net.Conn, error) {
-			return dialer.Dial(network, addr)
-		}
+
+	transport := &http.Transport{
+		Dial: dialer.Dial,
 	}
 
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   4 * time.Second,
+		Timeout:   2 * time.Second,
 	}
 
 	start := time.Now()
 	resp, err := client.Get(t.URL)
 	latency := time.Since(start)
 	if err != nil {
-		return 0, fmt.Errorf("probe failed: %w; sing-box output: %s", err, outBuf.String())
+		return 0, fmt.Errorf("probe failed: %w", err)
 	}
 	_ = resp.Body.Close()
 
@@ -105,9 +93,27 @@ func (t *URLTestService) Test(vlessURL string, localPort int) (time.Duration, er
 	if cmd.Process != nil {
 		_ = cmd.Process.Kill()
 	}
-	_ = cmd.Wait()
 
 	return latency, nil
+}
+
+func TLSTest(address, port, serverName string, timeout time.Duration) (time.Duration, error) {
+	dialer := &net.Dialer{
+		Timeout: timeout,
+	}
+
+	start := time.Now()
+
+	conn, err := tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(address, port), &tls.Config{
+		ServerName:         serverName,
+		InsecureSkipVerify: true,
+	})
+	if err != nil {
+		return 0, err
+	}
+	defer conn.Close()
+
+	return time.Since(start), nil
 }
 
 func parseVlessURL(raw string) (*models.VlessURL, error) {

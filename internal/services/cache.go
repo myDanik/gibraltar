@@ -5,7 +5,8 @@ import (
 	"sync"
 )
 
-const СacheKey = "latestResults"
+const AvailableKey = "latestResults"
+const AllKey = "currentConfigs"
 
 type Cache struct {
 	mu    sync.RWMutex

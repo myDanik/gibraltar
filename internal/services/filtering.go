@@ -1,14 +1,11 @@
 package services
 
 import (
-	"crypto/tls"
 	"fmt"
 	"gibraltar/internal/models"
 	"log"
-	"net"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type ConfigFilter struct {
@@ -45,26 +42,6 @@ func (f ConfigFilter) IsIPFromWhitelist(ip string) (bool, error) {
 		}
 	}
 	return false, fmt.Errorf("ip not exist in whitelist")
-}
-
-func TLSTest(address, port, serverName string, timeout time.Duration) (time.Duration, error) {
-	dialer := &net.Dialer{
-		Timeout: timeout,
-	}
-	address = net.JoinHostPort(address, port)
-
-	start := time.Now()
-
-	conn, err := tls.DialWithDialer(dialer, "tcp", address, &tls.Config{
-		ServerName:         serverName,
-		InsecureSkipVerify: true,
-	})
-	if err != nil {
-		return 0, err
-	}
-	defer conn.Close()
-
-	return time.Since(start), nil
 }
 
 func compareIPs(ip1, ip2 []byte) int {

@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"errors"
 	"gibraltar/internal/models"
+	"log"
 	"net"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -70,6 +72,7 @@ func (s PreparationService) ParseConfigs(inDirectoryPath string) ([]models.Vless
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
+		line = strings.ReplaceAll(line, "&amp;", "&")
 		if line == "" {
 			continue
 		}
@@ -129,7 +132,16 @@ func (s PreparationService) GetSubnetsFromFile(inDirectoryPath string) ([][]byte
 	return resultList, nil
 }
 
-func setTestResultValue(config *models.VlessConfig, localPort int, service URLTestService) {
+func setTestResultValue(config *models.VlessConfig, localPort int, service *URLTestService) {
+	if config.TestResult > 0 {
+		return
+	}
+	time, err := TLSTest(config.IP, config.Port, config.SNI, 2*time.Second)
+	if time <= 0 || err != nil {
+		config.TestResult = -1
+		return
+	}
+
 	lat, err := service.Test(config.URL, localPort)
 	if err != nil {
 		config.TestResult = -1
@@ -139,9 +151,10 @@ func setTestResultValue(config *models.VlessConfig, localPort int, service URLTe
 
 }
 
-func TestConfigs(configs []models.VlessConfig, service URLTestService) {
+func TestConfigs(configs []models.VlessConfig, service *URLTestService) {
+	log.Printf("%d configs will be tested\n", len(configs))
 	ports := make([]int, 0)
-	for i := 2080; i <= 2090; i++ {
+	for i := 2081; i <= 2131; i++ {
 		ports = append(ports, i)
 	}
 	jobs := make(chan int)
