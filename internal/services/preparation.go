@@ -154,7 +154,7 @@ func setTestResultValue(config *models.VlessConfig, localPort int, service *URLT
 func TestConfigs(configs []models.VlessConfig, service *URLTestService) {
 	log.Printf("%d configs will be tested\n", len(configs))
 	ports := make([]int, 0)
-	for i := 2081; i <= 2131; i++ {
+	for i := 2081; i <= 2091; i++ {
 		ports = append(ports, i)
 	}
 	jobs := make(chan int)

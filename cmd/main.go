@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var Timer *time.Timer = time.NewTimer(6 * time.Hour)
+const timerDuration = 6 * time.Hour
 
 func main() {
 	preparationService := services.NewPreparationService("/home/mydan/rjsxrd", "https://github.com/whoahaow/rjsxrd.git", "main")
@@ -24,11 +24,15 @@ func main() {
 	router := gin.Default()
 	router.GET("/configs", cfgHandler.CurrentAvailableConfigs)
 	router.PATCH("/configs", cfgHandler.RequestConfigsUpdate)
+
+	var Timer *time.Timer = time.NewTimer(timerDuration)
+	go func() {
+		for {
+			<-Timer.C
+			deps.CalculateAvailableServers()
+			Timer.Reset(timerDuration)
+		}
+	}()
 	router.Run("0.0.0.0:8080")
 
-	for {
-		<-Timer.C
-		deps.CalculateAvailableServers()
-		Timer.Reset(6 * time.Hour)
-	}
 }
