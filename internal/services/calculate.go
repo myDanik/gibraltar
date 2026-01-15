@@ -46,7 +46,9 @@ func (d Dependencies) CalculateAvailableServers() {
 		}
 	}
 	configs = out
-	d.Cache.Set(AllKey, configs)
+	var beforeTest []models.VlessConfig
+	copy(configs, beforeTest)
+	d.Cache.Set(AllKey, beforeTest)
 	for i := 0; i < TestAttempt; i++ {
 		TestConfigs(configs, d.VlessTestService)
 	}

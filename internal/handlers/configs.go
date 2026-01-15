@@ -45,9 +45,10 @@ func (h *ConfigHandlers) RequestConfigsUpdate(c *gin.Context) {
 	go func(configs []models.VlessConfig) {
 		for i := 0; i < services.TestAttempt; i++ {
 			services.TestConfigs(configs, h.deps.VlessTestService)
-			h.deps.Cache.Set(services.AvailableKey, configs[:services.SortConfigsByTestResult(configs)])
-			log.Println("UpdatedSuccessfully")
+			count := services.SortConfigsByTestResult(configs)
+			h.deps.Cache.Set(services.AvailableKey, configs[:count])
 		}
+		log.Println("UpdatedSuccessfully")
 	}(configs)
 
 	c.String(http.StatusOK, "Your request has been accepted and is being processed.\nPlease try requesting a list of servers in 5 minutes.\n")
