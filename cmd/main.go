@@ -19,8 +19,11 @@ func main() {
 		VlessTestService:   tester,
 		Cache:              cache,
 	}
-	deps.CalculateAvailableServers()
+	go func(deps *services.Dependencies) {
+		deps.CalculateAvailableServers()
+	}(deps)
 	cfgHandler := handlers.NewConfigHandler(deps)
+
 	router := gin.Default()
 	router.GET("/configs", cfgHandler.CurrentAvailableConfigs)
 	router.PATCH("/configs", cfgHandler.RequestConfigsUpdate)
