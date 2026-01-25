@@ -25,6 +25,7 @@ func (h *ConfigHandlers) CurrentAvailableConfigs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "configs unavailable retry later",
 		})
+		return
 	}
 	resultString := ""
 	for _, v := range configs {
@@ -34,14 +35,18 @@ func (h *ConfigHandlers) CurrentAvailableConfigs(c *gin.Context) {
 }
 
 func (h *ConfigHandlers) RequestConfigsUpdate(c *gin.Context) {
-	configs, ok := h.deps.Cache.Get(services.AllKey)
+	originalConfigs, ok := h.deps.Cache.Get(services.AllKey)
+
 	if !ok {
 		go func() {
 			h.deps.CalculateAvailableServers()
 		}()
 		c.String(http.StatusOK, "Your request has been accepted and is being processed.\nPlease try requesting a list of servers in 5 minutes.\n")
+		return
 
 	}
+	configs := make([]models.VlessConfig, len(originalConfigs))
+	copy(configs, originalConfigs)
 	go func(configs []models.VlessConfig) {
 		for i := 0; i < services.TestAttempt; i++ {
 			services.TestConfigs(configs, h.deps.VlessTestService)

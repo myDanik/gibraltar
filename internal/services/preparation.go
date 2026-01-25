@@ -8,11 +8,13 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
@@ -29,36 +31,62 @@ func NewPreparationService(localPath, remoteURL, branch string) *PreparationServ
 		Branch:    branch,
 	}
 }
-
 func (s PreparationService) Pull() error {
+	if _, err := os.Stat(s.LocalPath); os.IsNotExist(err) {
+		return s.cloneRepo()
+	}
+
 	r, err := git.PlainOpen(s.LocalPath)
 	if err != nil {
-		return err
+		_ = os.RemoveAll(s.LocalPath)
+		return s.cloneRepo()
 	}
 
-	err = r.Fetch(&git.FetchOptions{
+	if err := r.Fetch(&git.FetchOptions{
 		RemoteName: "origin",
+		RefSpecs:   []config.RefSpec{config.RefSpec("+refs/heads/*:refs/remotes/origin/*")},
 		Force:      true,
-	})
-	if err != nil {
-		return err
+	}); err != nil && err != git.NoErrAlreadyUpToDate {
+		_ = os.RemoveAll(s.LocalPath)
+		return s.cloneRepo()
 	}
 
-	refName := plumbing.NewBranchReferenceName(s.Branch)
-	ref, err := r.Reference(refName, true)
+	remoteRef := plumbing.NewRemoteReferenceName("origin", s.Branch)
+	ref, err := r.Reference(remoteRef, true)
 	if err != nil {
-		return err
+		_ = os.RemoveAll(s.LocalPath)
+		return s.cloneRepo()
 	}
 
 	w, err := r.Worktree()
 	if err != nil {
+		_ = os.RemoveAll(s.LocalPath)
+		return s.cloneRepo()
+	}
+
+	if err := w.Reset(&git.ResetOptions{
+		Mode:   git.HardReset,
+		Commit: ref.Hash(),
+	}); err != nil {
+		_ = os.RemoveAll(s.LocalPath)
+		return s.cloneRepo()
+	}
+
+	return nil
+}
+
+func (s PreparationService) cloneRepo() error {
+	if err := os.MkdirAll(filepath.Dir(s.LocalPath), 0o755); err != nil {
 		return err
 	}
 
-	return w.Reset(&git.ResetOptions{
-		Mode:   git.HardReset,
-		Commit: ref.Hash(),
+	_, err := git.PlainClone(s.LocalPath, false, &git.CloneOptions{
+		URL:           s.RemoteURL,
+		ReferenceName: plumbing.NewBranchReferenceName(s.Branch),
+		SingleBranch:  true,
+		Depth:         1,
 	})
+	return err
 }
 
 func (s PreparationService) ParseConfigs(inDirectoryPath string) ([]models.VlessConfig, error) {
