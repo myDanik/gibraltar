@@ -31,9 +31,12 @@ const (
 // Directory and files
 var (
 	ConfigSourceDirectoryPath = filepath.Join(os.Getenv("HOME"), "rjsxrd")
-	VlessSecureConfigs        = filepath.Join(ConfigSourceDirectoryPath, "githubmirror", "bypass", "bypass-all.txt")
-	CIDRWhitelist             = filepath.Join(ConfigSourceDirectoryPath, "source", "config", "cidrwhitelist.txt")
-	URLsWhitelist             = filepath.Join(ConfigSourceDirectoryPath, "source", "config", "whitelist-all.txt")
+	VlessSecureConfigsFile    = filepath.Join(ConfigSourceDirectoryPath, "githubmirror", "bypass", "bypass-all.txt")
+	CIDRWhitelistFile         = filepath.Join(ConfigSourceDirectoryPath, "source", "config", "cidrwhitelist.txt")
+	URLsWhitelistFile         = filepath.Join(ConfigSourceDirectoryPath, "source", "config", "whitelist-all.txt")
+	VlessSecureConfigsURL     = "https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/githubmirror/bypass/bypass-all.txt"
+	CIDRWhitelistURL          = "https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/source/config/cidrwhitelist.txt"
+	URLsWhitelistURL          = "https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/source/config/whitelist-all.txt"
 )
 
 // Remote git repo

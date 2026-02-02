@@ -3,12 +3,33 @@ package services
 import (
 	"bufio"
 	"gibraltar/internal/models"
+	"net/http"
 	"os"
 	"strings"
 )
 
-func ParseConfigs(fullPath string) ([]*models.VlessConfig, error) {
-	file, err := os.Open(fullPath)
+type DataParser interface {
+	ParseConfigs() ([]*models.VlessConfig, error)
+	ParseSubnets() (map[string]struct{}, error)
+	ParseSNIs() (map[string]struct{}, error)
+}
+
+type FileParser struct {
+	ConifgPath string
+	IPListPath string
+	SNIsPath   string
+}
+
+func NewFileParser(configPath, ipListPath, snisPath string) *FileParser {
+	return &FileParser{
+		ConifgPath: configPath,
+		IPListPath: ipListPath,
+		SNIsPath:   snisPath,
+	}
+}
+
+func (p *FileParser) ParseConfigs() ([]*models.VlessConfig, error) {
+	file, err := os.Open(p.ConifgPath)
 	if err != nil {
 		return nil, err
 
@@ -31,8 +52,8 @@ func ParseConfigs(fullPath string) ([]*models.VlessConfig, error) {
 	return configs, nil
 }
 
-func GetSubnetsFromFile(fullPath string) (map[string]struct{}, error) {
-	file, err := os.Open(fullPath)
+func (p *FileParser) ParseSubnets() (map[string]struct{}, error) {
+	file, err := os.Open(p.IPListPath)
 	if err != nil {
 		return nil, err
 	}
@@ -45,6 +66,90 @@ func GetSubnetsFromFile(fullPath string) (map[string]struct{}, error) {
 	}
 
 	return subnetsMap, nil
+}
+
+func (p *FileParser) GetSNIsFromFile() (map[string]struct{}, error) {
+	file, err := os.Open(p.SNIsPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	allowedSNIs := make(map[string]struct{})
+	for scanner.Scan() {
+		line := scanner.Text()
+		allowedSNIs[line] = struct{}{}
+	}
+	return allowedSNIs, nil
+
+}
+
+type UrlParser struct {
+	ConfigsURL string
+	IPListURL  string
+	SNIsURL    string
+}
+
+func NewUrlParser(configsURL, ipListURL, snisURL string) *UrlParser {
+	return &UrlParser{
+		ConfigsURL: configsURL,
+		IPListURL:  ipListURL,
+		SNIsURL:    snisURL,
+	}
+}
+
+func (p *UrlParser) ParseConfigs() ([]*models.VlessConfig, error) {
+	resp, err := http.Get(p.ConfigsURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	scanner := bufio.NewScanner(resp.Body)
+	configs := make([]*models.VlessConfig, 0)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		line = strings.ReplaceAll(line, "&amp;", "&")
+		if line == "" {
+			continue
+		}
+		config := &models.VlessConfig{
+			URL: line,
+		}
+
+		configs = append(configs, config)
+	}
+	return configs, nil
+}
+
+func (p *UrlParser) ParseSubnets() (map[string]struct{}, error) {
+	resp, err := http.Get(p.IPListURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	scanner := bufio.NewScanner(resp.Body)
+	subnetsMap := make(map[string]struct{})
+	for scanner.Scan() {
+		line := scanner.Text()
+		subnetsMap[string(getSubnet(line))] = struct{}{}
+	}
+
+	return subnetsMap, nil
+}
+
+func (p *UrlParser) ParseSNIs() (map[string]struct{}, error) {
+	resp, err := http.Get(p.SNIsURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	scanner := bufio.NewScanner(resp.Body)
+	allowedSNIs := make(map[string]struct{})
+	for scanner.Scan() {
+		line := scanner.Text()
+		allowedSNIs[line] = struct{}{}
+	}
+	return allowedSNIs, nil
 }
 
 func getSubnet(ip string) []byte {
@@ -62,20 +167,4 @@ func getSubnet(ip string) []byte {
 		num = append(num, byte(ch))
 	}
 	return num
-}
-
-func GetSNIsFromFile(fullPath string) (map[string]struct{}, error) {
-	file, err := os.Open(fullPath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	allowedSNIs := make(map[string]struct{})
-	for scanner.Scan() {
-		line := scanner.Text()
-		allowedSNIs[line] = struct{}{}
-	}
-	return allowedSNIs, nil
-
 }

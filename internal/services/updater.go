@@ -12,13 +12,15 @@ type ConfigUpdater struct {
 	Cache          *Cache
 	Filter         *ConfigFilter
 	URLTestService *URLTestService
+	DataSource     DataParser
 }
 
-func NewConfigUpdater(cache *Cache, filter *ConfigFilter, urlTestService *URLTestService) *ConfigUpdater {
+func NewConfigUpdater(cache *Cache, filter *ConfigFilter, urlTestService *URLTestService, dataSource DataParser) *ConfigUpdater {
 	return &ConfigUpdater{
 		Cache:          cache,
 		Filter:         filter,
 		URLTestService: urlTestService,
+		DataSource:     dataSource,
 	}
 }
 
@@ -32,7 +34,7 @@ func (u *ConfigUpdater) RunTest(configs []*models.VlessConfig) {
 }
 
 func (u *ConfigUpdater) AddConfigsToCacheFromSource() error {
-	configs, err := ParseConfigs(config.VlessSecureConfigs)
+	configs, err := u.DataSource.ParseConfigs()
 	if err != nil {
 		return err
 	}

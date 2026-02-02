@@ -23,10 +23,6 @@ func main() {
 	var wg sync.WaitGroup
 
 	gitService := services.NewGitService(config.ConfigSourceDirectoryPath, config.RemoteRepository, config.RemoteBranch)
-	err := gitService.Pull()
-	if err != nil {
-		log.Fatalln(err)
-	}
 	newDataExist := make(chan struct{}, 1)
 	wg.Add(1)
 	go func() {
@@ -39,11 +35,13 @@ func main() {
 				close(newDataExist)
 				return
 			case <-tick.C:
-				if err := gitService.UpdateRepo(); err != nil {
+				if newData, err := gitService.ExistNewCommit(); newData {
 					select {
 					case newDataExist <- struct{}{}:
 					default:
 					}
+				} else {
+					log.Println(err)
 				}
 
 			}
@@ -51,16 +49,17 @@ func main() {
 	}()
 	tester := services.NewVlessTestService(config.TestURL)
 	cache := services.NewCache()
-	CIDRlist, err := services.GetSubnetsFromFile(config.CIDRWhitelist)
+	dataSource := services.NewUrlParser(config.VlessSecureConfigsURL, config.CIDRWhitelistURL, config.URLsWhitelistURL)
+	CIDRlist, err := dataSource.ParseSubnets()
 	if err != nil {
 		panic(fmt.Errorf("Can't get CIDR whitelist: %s", err))
 	}
-	allowedSNIs, err := services.GetSNIsFromFile(config.URLsWhitelist)
+	allowedSNIs, err := dataSource.ParseSNIs()
 	if err != nil {
 		panic(fmt.Errorf("Can't get SNI whitelist: %s", err))
 	}
 	filter := services.NewConfigFilter(CIDRlist, allowedSNIs)
-	updater := services.NewConfigUpdater(cache, filter, tester)
+	updater := services.NewConfigUpdater(cache, filter, tester, dataSource)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

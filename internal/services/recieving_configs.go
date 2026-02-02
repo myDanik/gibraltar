@@ -144,6 +144,21 @@ func (s GitService) UpdateRepo() error {
 
 }
 
+func (s GitService) ExistNewCommit() (bool, error) {
+	localCommit, err := s.GetCurrentLocalCommit()
+	if err != nil {
+		return false, err
+	}
+	remoteCommit, err := s.GetLatestRemoteCommit()
+	if err != nil {
+		return false, err
+	}
+	if localCommit == remoteCommit {
+		return false, nil
+	}
+	return true, nil
+}
+
 func toAPIUrl(raw, branch string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
